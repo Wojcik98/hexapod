@@ -1,3 +1,3 @@
 # Hexapod
 
-Six-legged walking robot made as Bachelor's Thesis.
+Six-legged walking robot made as a Bachelor's Thesis.
