@@ -1,0 +1,4 @@
+echo "Sourcing local ROS..."
+source install/setup.bash
+source install/local_setup.bash
+export PYTHONUNBUFFERED=1
