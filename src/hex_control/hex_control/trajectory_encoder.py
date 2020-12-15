@@ -26,24 +26,6 @@ print(port.write(byts))
 """
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class ServoConfig:
     def __init__(self, center: int, dir_: int):
         self.pin = 99
@@ -55,28 +37,36 @@ class ServoConfig:
         return self
 
 
+def make_cmd(servo_pin: int, duty: int):
+    mask = 2**7 - 1  # last 7 bits
+    duty *= 4
+    low = duty & mask
+    high = int(duty / (2**7)) & mask
+    return bytearray([low, high])
+
+
 class TrajectoryEncoder:
     MULTIPLE_TARGETS_CMD = 0x9F
 
     joint_to_servo = {
-        'coxa_joint_l1': ServoConfig(2280, -1).conn(9),
-        'femur_joint_l1': ServoConfig(1960, 1).conn(10),
+        'coxa_joint_l1': ServoConfig(2150, -1).conn(9),
+        'femur_joint_l1': ServoConfig(1920, 1).conn(10),
         'tibia_joint_l1': ServoConfig(600, -1).conn(11),
-        'coxa_joint_l2': ServoConfig(2150, -1).conn(12),
-        'femur_joint_l2': ServoConfig(1860, 1).conn(13),
-        'tibia_joint_l2': ServoConfig(580, -1).conn(14),
-        'coxa_joint_l3': ServoConfig(2540, -1).conn(21),
-        'femur_joint_l3': ServoConfig(1800, 1).conn(22),
-        'tibia_joint_l3': ServoConfig(610, -1).conn(23),
+        'coxa_joint_l2': ServoConfig(2100, -1).conn(12),
+        'femur_joint_l2': ServoConfig(1840, 1).conn(13),
+        'tibia_joint_l2': ServoConfig(560, -1).conn(14),
+        'coxa_joint_l3': ServoConfig(2600, -1).conn(21),
+        'femur_joint_l3': ServoConfig(1700, 1).conn(22),
+        'tibia_joint_l3': ServoConfig(640, -1).conn(23),
         'coxa_joint_r1': ServoConfig(810, -1).conn(6),
-        'femur_joint_r1': ServoConfig(1130, -1).conn(7),
-        'tibia_joint_r1': ServoConfig(2450, 1).conn(8),
-        'coxa_joint_r2': ServoConfig(1020, -1).conn(15),
-        'femur_joint_r2': ServoConfig(1130, -1).conn(16),
-        'tibia_joint_r2': ServoConfig(2400, 1).conn(17),
-        'coxa_joint_r3': ServoConfig(380, -1).conn(18),
-        'femur_joint_r3': ServoConfig(1080, -1).conn(19),
-        'tibia_joint_r3': ServoConfig(2450, 1).conn(20),
+        'femur_joint_r1': ServoConfig(1150, -1).conn(7),
+        'tibia_joint_r1': ServoConfig(2440, 1).conn(8),
+        'coxa_joint_r2': ServoConfig(1150, -1).conn(15),
+        'femur_joint_r2': ServoConfig(1160, -1).conn(16),
+        'tibia_joint_r2': ServoConfig(2250, 1).conn(17),
+        'coxa_joint_r3': ServoConfig(450, -1).conn(18),
+        'femur_joint_r3': ServoConfig(1100, -1).conn(19),
+        'tibia_joint_r3': ServoConfig(2420, 1).conn(20),
     }
 
     def __init__(self):
@@ -103,16 +93,9 @@ class TrajectoryEncoder:
             servo_config = self.joint_to_servo[joint]
             duty = self.angle_to_duty(servo_config, angle)
 
-            cmd += self.make_cmd(servo_config.pin, duty)
+            cmd += make_cmd(servo_config.pin, duty)
 
         return cmd
-
-    def make_cmd(self, servo_pin: int, duty: int):
-        mask = 2**7 - 1  # last 7 bits
-        duty *= 4
-        low = duty & mask
-        high = int(duty / (2**7)) & mask
-        return bytearray([low, high])
 
     def angle_to_duty(self, servo_config: ServoConfig, angle: float):
         displacement = int(angle * 1000. / (pi / 2.)) * servo_config.dir_
