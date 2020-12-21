@@ -1,12 +1,13 @@
 import transformations as tf
 import numpy as np
 from numpy import ndarray
-from time import sleep
 
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Pose, TransformStamped
+from rclpy.duration import Duration
 from tf2_msgs.msg import TFMessage
 from tf2_py import LookupException
+from tf2_ros.buffer import Buffer
 
 
 def pose_to_matrix(pose: Pose) -> ndarray:
@@ -56,19 +57,18 @@ def interpolate(start: np.ndarray, stop: np.ndarray, phase: float) -> np.ndarray
     return result
 
 
-def get_transform_lookup(tf_buffer):
+def get_transform_lookup(tf_buffer: Buffer):
     def transform_lookup(target: str, source: str) -> ndarray:
         MAX_TRIES = 10
         attempt = 1
         while attempt < MAX_TRIES:
             try:
-                transform = tf_buffer.lookup_transform(target, source, Time())
+                transform = tf_buffer.lookup_transform(target, source, Time(), timeout=Duration(seconds=0.5))
             except LookupException:
                 attempt += 1
                 if attempt >= MAX_TRIES:
                     raise
                 print("Couldn't transform, retrying...")
-                sleep(0.5)
             else:
                 break
         transform = transform.transform
