@@ -87,6 +87,11 @@ class LineDetector(Node):
         path = path.reshape((len(path), 2))
         subpath = self.get_subpath(path)
 
+        # if going in another direction, abort
+        # TODO make it  smarter
+        if subpath[0][0] < 0.01:
+            return
+
         # SENDING MESSAGE
 
         msg = Path()
