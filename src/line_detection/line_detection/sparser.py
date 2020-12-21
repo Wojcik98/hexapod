@@ -1,14 +1,8 @@
-import os
-import platform
-import time
 from typing import List, Tuple
 
-import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import rclpy
 import transformations as tf
-from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from rclpy.node import Node
@@ -38,7 +32,7 @@ def matrix_dist(a: Matrix, b: Matrix):
 class Sparser(Node):
     def __init__(self):
         super().__init__('sparser')
-        self.stride = 0.1
+        self.stride = 0.02
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
@@ -47,9 +41,7 @@ class Sparser(Node):
         self.publish_transform = get_transform_publisher(self.tf_broadcaster,
                                                          self.get_clock())
 
-        # self.publish_transform('odom', 'base_link', tf.translation_matrix((0, 0, 0)))
         self.pub = self.create_publisher(Path, 'sparse_path', 10)
-        # self.publish_transform('odom', 'front_point', start_pose)
         self.curr_path = []
         self.publish_path(self.curr_path)
 
@@ -61,9 +53,9 @@ class Sparser(Node):
         )
 
     def new_trajectory(self, msg: Path):
-        if len(self.curr_path) == 0:
-            self.curr_path.append(self.transform('odom', 'front_point'))
-        # self.publish_transform('odom', 'base_link', tf.translation_matrix((0, 0, 0)))
+        # if len(self.curr_path) == 0:
+        #     self.curr_path.append(self.transform('odom', 'front_point'))
+        self.curr_path = [self.transform('odom', 'front_point')]
         projection_to_odom = self.transform('odom', 'base_link')
         projection_to_odom[2, 3] = 0.0
         dense_path = [
@@ -73,20 +65,20 @@ class Sparser(Node):
             )
             for pose_stamped in msg.poses
         ]
-        # dense_path = [
-        #     pose_to_matrix(pose_stamped.pose)
-        #     for pose_stamped in msg.poses
-        # ]
 
         first_new = dense_path[0]
         last_idx, last_point = self.get_last_closest(first_new, self.curr_path)
+        last_point = self.curr_path[last_idx]
         inter_path = self.interpolate_path(last_point, first_new)
         sparse_path = self.make_sparse(inter_path[-1], dense_path)
+        fixed_orientation = self.fix_orientation(
+            self.curr_path[last_idx - 1], inter_path + sparse_path
+        )
 
-        self.curr_path = self.curr_path[:last_idx] + inter_path + sparse_path
+        self.curr_path = self.curr_path[:last_idx] + fixed_orientation
         front_point = self.transform('odom', 'front_point')
         front_point_idx, _ = self.get_last_closest(front_point, self.curr_path)
-        self.publish_path(self.curr_path[front_point_idx + 1:])
+        self.publish_path(self.curr_path[front_point_idx:])
 
     def publish_path(self, path: List[Matrix]):
         msg = Path()
@@ -149,6 +141,24 @@ class Sparser(Node):
                 remaining_path = remaining_path[idx + 1:]
 
         return sparse_path
+
+    def fix_orientation(self, prev_point: Matrix, path: List[Matrix]) -> List[Matrix]:
+        new_path = []
+        for i, point in enumerate(path):
+            prev_tr = tf.translation_from_matrix(prev_point)
+            point_tr = tf.translation_from_matrix(point)
+            relative = point_tr - prev_tr
+            x, y, _ = relative
+            rot = np.arctan2(y, x)
+            oriented_point = tf.concatenate_matrices(
+                tf.translation_matrix(point_tr),
+                tf.rotation_matrix(rot, (0, 0, 1))
+            )
+
+            new_path.append(oriented_point)
+            prev_point = point
+
+        return new_path
 
     def get_farthest_in_range(self, start_point: Matrix, path: List[Matrix]) -> Tuple[int, Matrix]:
         farthest = 0
