@@ -19,7 +19,8 @@ class DummyPathPublisher(Node):
         self._tf_listener = TransformListener(self._tf_buffer, self)
         self.transform = get_transform_lookup(self._tf_buffer)
 
-        self.pub = self.create_publisher(Path, 'sparse_path', 10)
+        # self.pub = self.create_publisher(Path, 'sparse_path', 10)
+        self.pub = self.create_publisher(Path, 'dense_path', 10)
 
         self.msg_sent = False
         self.create_timer(1, self.send_msg)
@@ -33,7 +34,7 @@ class DummyPathPublisher(Node):
         front_point = self.transform('odom', 'front_point')
         inc = tf.concatenate_matrices(
             tf.rotation_matrix(-5 * pi / 180, (0, 0, 1)),
-            tf.translation_matrix((0.03, 0.0, 0)),
+            tf.translation_matrix((0.03, 0.01, 0)),
         )
         path = [tf.concatenate_matrices(front_point, inc)]
         for i in range(179):

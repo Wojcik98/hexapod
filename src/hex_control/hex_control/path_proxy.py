@@ -40,7 +40,6 @@ class PathProxy:
             return new_record.point
 
     def first_unused(self) -> ndarray:
-        print('Taking from proxy')
         if len(self.path_buffer) > 0:
             return self.path_buffer[0]
         else:
