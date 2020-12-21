@@ -1,11 +1,12 @@
 import rclpy
-# import spidev
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from builtin_interfaces.msg import Time
 from math import pi
 
+from hex_control.executor import Executor
 from hex_control.trajectory_encoder import TrajectoryEncoder
+from std_msgs.msg import UInt8MultiArray
 
 SPI_SPEED = 1000000
 
@@ -14,14 +15,11 @@ class JointStatePub(Node):
     def __init__(self):
         super().__init__('joint_state_pub')
         self.pub = self.create_publisher(JointState, 'joint_states', 10)
+        self.spi_bridge = self.create_publisher(
+            UInt8MultiArray, 'stm32_cmd', 10
+        )
 
         self.encoder = TrajectoryEncoder()
-        # try:
-        #     self.spi = spidev.SpiDev()
-        #     self.spi.open(0, 0)
-        #     self.spi.max_speed_hz = SPI_SPEED
-        # except FileNotFoundError:
-        #     pass
         self.spi = None
 
         self.i = 0
@@ -45,19 +43,21 @@ class JointStatePub(Node):
                     else:
                         positions.append(-pi / 2)
                 elif seg[0] == 'f':
-                    positions.append(pi / 8)
+                    positions.append(0.0)
                 else:
                     if self.i % 2:
-                        positions.append(-pi / 8)
+                        positions.append(pi / 2)
                     else:
-                        positions.append(pi / 8)
+                        positions.append(-pi / 2)
 
         angles = {key: val for key, val in zip(names, positions)}
         data = self.encoder.encode_step(angles)
-        if self.spi:
-            data = bytearray([42]) + data
-            self.spi.xfer3(data)
-            print(f"Sent data, length {len(data)}, content: {data}")
+        data = data * 250
+
+        cmd = Executor.SET_SERVOS_NOW
+        data = bytearray([cmd]) + data
+        spi_msg = UInt8MultiArray(data=data)
+        self.spi_bridge.publish(spi_msg)
 
         msg = JointState()
         msg.header.stamp = Time()
@@ -67,7 +67,6 @@ class JointStatePub(Node):
         msg.position = positions
 
         self.pub.publish(msg)
-        # self.i += 1
 
 
 def main(args=None):
