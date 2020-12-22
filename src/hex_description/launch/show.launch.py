@@ -53,10 +53,10 @@ def generate_launch_description():
             output='screen',
             arguments=[description_path],
         ),
-        Node(
-            name='dummy_joint_state_publisher',
-            package='hex_control',
-            executable='dummy_joint_state_publisher',
-            output='screen'
-        )
+        # Node(
+        #     name='dummy_joint_state_publisher',
+        #     package='hex_control',
+        #     executable='dummy_joint_state_publisher',
+        #     output='screen'
+        # )
     ])

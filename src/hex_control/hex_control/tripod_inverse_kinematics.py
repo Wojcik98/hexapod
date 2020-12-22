@@ -73,8 +73,8 @@ class TripodInverseKinematics:
 
     def triangle(self, center: ndarray, left_side: bool) -> Tuple[ndarray, ndarray, ndarray]:
         mult = 1 if left_side else -1
-        x_shift = 0.13
-        side_y_shift = mult * 0.15
+        x_shift = 0.15
+        side_y_shift = mult * 0.17
         mid_y_shift = mult * -0.2
         z = 0.0
         front_point = tf.concatenate_matrices(center, tf.translation_matrix((x_shift, side_y_shift, z)))

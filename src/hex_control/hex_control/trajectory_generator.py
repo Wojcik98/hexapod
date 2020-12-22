@@ -7,16 +7,15 @@ from hex_control.trajectory_point import TrajectoryPoint
 from hex_control.transformations_utils import midpoint, interpolate
 
 SERVO_FREQ = 250
-SENT_TRAJECTORY_TIME = 1
 TRAJECTORY_TIME = 1.
-GAIT_PERIOD = 0.5
+GAIT_PERIOD = 2.0
 
 
 class TrajectoryGenerator:
     def __init__(self, path_proxy: PathProxy):
         self.path_proxy = path_proxy
-        self.leg_lift = 0.1
-        self.base_height = 0.1
+        self.leg_lift = 0.07
+        self.base_height = 0.15
 
     def generate_trajectory(self, start_step: TrajectoryPoint) -> List[TrajectoryPoint]:
         trajectory = []

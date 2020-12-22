@@ -59,7 +59,7 @@ class Executor(Node):
         self.publish_transform = get_transform_publisher(self.broadcaster, self.get_clock())
 
         self.pub = self.create_publisher(JointState, 'joint_states', 10)
-        self.base_link_start_height = tf.translation_matrix((0.0, 0.0, 0.1))
+        self.base_link_start_height = tf.translation_matrix((0.0, 0.0, 0.15))
 
         self.path_proxy = PathProxy(self.steps_trajectory, self.get_logger())
         self.trajectory_generator = TrajectoryGenerator(self.path_proxy)
@@ -179,6 +179,7 @@ class Executor(Node):
             point_i = len(self.prev_trajectory) - 1
         point = self.prev_trajectory[point_i]
         angles = self.inv_kin_calc.calc_point(point)
+        # print(angles)
 
         names, positions = [], []
         for name, position in angles.items():

@@ -102,6 +102,8 @@ class TrajectoryEncoder:
         duty = servo_config.center + displacement
         if duty < 0 and duty + 4000 <= 2550:
             duty += 4000    # reverse direction
+        if duty < 460 or duty > 2550:
+            print(f'Joint {servo_config.pin} limit: {duty}!')
         duty = max(duty, 460)
         duty = min(duty, 2550)
         return duty

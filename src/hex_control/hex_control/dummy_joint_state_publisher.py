@@ -22,8 +22,6 @@ class JointStatePub(Node):
         self.encoder = TrajectoryEncoder()
         self.spi = None
 
-        self.i = 0
-
         self.timer_period = 1.0
         self.tmr = self.create_timer(self.timer_period, self.timer_callback)
 
@@ -31,24 +29,45 @@ class JointStatePub(Node):
         names = []
         positions = []
 
+        desired = {'coxa_joint_l1': 1.1676793609514362,
+                   'femur_joint_l1': 0.37447060256083464,
+                   'tibia_joint_l1': -1.9052273890701883,
+                   'coxa_joint_r2': -1.5707963267948966,
+                   'femur_joint_r2': 0.3393852618985336,
+                   'tibia_joint_r2': -1.7052129720975133,
+                   'coxa_joint_l3': 1.9739132926383571,
+                   'femur_joint_l3': 0.37447060256083464,
+                   'tibia_joint_l3': -1.9052273890701883,
+                   'coxa_joint_r1': -1.1676793609514362,
+                   'femur_joint_r1': 1.7272784703057642,
+                   'tibia_joint_r1': -2.5150412097293935,
+                   'coxa_joint_l2': 1.5707963267948966,
+                   'femur_joint_l2': 1.4429503104838526,
+                   'tibia_joint_l2': -2.2342414561008335,
+                   'coxa_joint_r3': -1.9739132926383571,
+                   'femur_joint_r3': 1.7272784703057642,
+                   'tibia_joint_r3': -2.5150412097293935}
+
         segments = ['coxa', 'femur', 'tibia']
         legs = ['l1', 'l2', 'l3', 'r1', 'r2', 'r3']
 
-        for seg in segments:
-            for leg in legs:
-                names.append(f'{seg}_joint_{leg}')
-                if seg[0] == 'c':
-                    if leg[0] == 'l':
-                        positions.append(pi / 2)
+        if desired is None:
+            for seg in segments:
+                for leg in legs:
+                    names.append(f'{seg}_joint_{leg}')
+                    if seg[0] == 'c':
+                        if leg[0] == 'l':
+                            positions.append(pi / 2)
+                        else:
+                            positions.append(-pi / 2)
+                    elif seg[0] == 'f':
+                        positions.append(pi / 4)
                     else:
-                        positions.append(-pi / 2)
-                elif seg[0] == 'f':
-                    positions.append(0.0)
-                else:
-                    if self.i % 2:
-                        positions.append(pi / 2)
-                    else:
-                        positions.append(-pi / 2)
+                        positions.append(-2 * pi / 3)
+        else:
+            for name, position in desired.items():
+                names.append(name)
+                positions.append(position)
 
         angles = {key: val for key, val in zip(names, positions)}
         data = self.encoder.encode_step(angles)

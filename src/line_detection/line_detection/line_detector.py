@@ -1,16 +1,24 @@
 import os
 import platform
 import time
+from typing import List, Tuple
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import rclpy
+import transformations as tf
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
+from math import pi
 from nav_msgs.msg import Path
 from rclpy.node import Node
+from scipy.ndimage import uniform_filter1d
+
+from hex_control.transformations_utils import matrix_to_pose
+
+Matrix = np.ndarray
 
 PACKAGE = 'line_detection'
 UPDATE_INTERVAL = 0.5
@@ -60,12 +68,6 @@ class LineDetector(Node):
         print(f'To gray: {1000 * (stop - start):.3f}ms')
         start = stop
 
-        # # blurd = filters.gaussian(gray, sigma=30)
-        # blurd = gaussian_filter(gray, sigma=3)
-        # stop = time.time()
-        # print(f'Blurred: {1000 * (stop - start):.3f}ms')
-        # start = stop
-
         _, thres = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
         stop = time.time()
         print(f'Thresholded: {1000 * (stop - start):.3f}ms')
@@ -73,9 +75,6 @@ class LineDetector(Node):
 
         cont, hier = cv2.findContours(thres, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         raw_path = max(cont, key=cv2.contourArea).astype("float64")
-        # raw_path = raw_path.reshape((raw_path.shape[0], 2))
-        # output = np.zeros((480, 640), dtype=np.uint8)
-        # cv2.drawContours(output, [raw_path], -1, 1, thickness=cv2.FILLED)
         stop = time.time()
         print(f"Contour: {1000 * (stop - start):.3f}ms")
         start = stop
@@ -92,24 +91,28 @@ class LineDetector(Node):
         if subpath[0][0] < 0.01:
             return
 
-        # SENDING MESSAGE
+        prev_point = (0.0, 0.0)
+        oriented = self.add_orientation(prev_point, subpath)
+        print(tf.euler_from_matrix(oriented[0])[2] * 180 / pi)
+        print(tf.translation_from_matrix(oriented[0]))
 
+        self.publish_path(oriented)
+
+    def publish_path(self, path: List[Matrix]):
         msg = Path()
-        # msg.header.frame_id = 'base_projection'
         msg.header.frame_id = 'base_link'
         msg.header.stamp.sec = int(self.get_clock().now().nanoseconds / 10**9)
         msg.header.stamp.nanosec = self.get_clock().now().nanoseconds % 10**9
 
-        for point in subpath:
+        poses = [matrix_to_pose(point) for point in path]
+        for pose in poses:
             pose_stamped = PoseStamped()
             pose_stamped.header = msg.header
-            pose_stamped.pose.position.x = point[0]
-            pose_stamped.pose.position.y = point[1]
-            pose_stamped.pose.position.z = 0.0  # TODO height from base_to_odom or represent it in odom reference
+            pose_stamped.pose = pose
             msg.poses.append(pose_stamped)
 
         self.pub.publish(msg)
-        print('Sent')
+        print('Dense path published!')
 
     def shift_path(self, path):
         start_shape = path.shape
@@ -135,6 +138,25 @@ class LineDetector(Node):
 
         line_end = i
         return path[:line_end]
+
+    def add_orientation(self, prev_point:Tuple[float, float],
+                        path: List[Tuple[float, float]]) -> List[Matrix]:
+        new_path = []
+        for point in path:
+            x_prev, y_prev = prev_point
+            x_curr, y_curr = point
+            x, y, = x_curr - x_prev, y_curr - y_prev
+            rot = np.arctan2(y, x)
+
+            oriented_point = tf.concatenate_matrices(
+                tf.translation_matrix((x_curr, y_curr, 0)),
+                tf.rotation_matrix(rot, (0, 0, 1))
+            )
+            new_path.append(oriented_point)
+
+            prev_point = point
+
+        return new_path
 
 
 def main(args=None):

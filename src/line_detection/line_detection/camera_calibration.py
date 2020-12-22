@@ -28,7 +28,8 @@ def main():
         img_path = '/src/line_detection/line_detection/calib.jpg'
         img = cv2.imread(img_path)
 
-    plt.imsave('/home/ubuntu/orig.jpg', img)
+    if rpi:
+        plt.imsave('/home/ubuntu/orig.jpg', img)
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
     _, bw = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
