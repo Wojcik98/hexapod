@@ -1,5 +1,5 @@
 import transformations as tf
-from math import pi, sin
+from math import cos, pi, sin
 from typing import List
 
 from hex_control.path_proxy import PathProxy
@@ -9,14 +9,14 @@ from hex_control.transformations_utils import midpoint, interpolate
 SERVO_FREQ = 250
 SENT_TRAJECTORY_TIME = 1
 TRAJECTORY_TIME = 1.
-GAIT_PERIOD = 0.5
+GAIT_PERIOD = 1.0
 
 
 class TrajectoryGenerator:
     def __init__(self, path_proxy: PathProxy):
         self.path_proxy = path_proxy
         self.leg_lift = 0.1
-        self.base_height = 0.1
+        self.base_height = 0.15
 
     def generate_trajectory(self, start_step: TrajectoryPoint) -> List[TrajectoryPoint]:
         trajectory = []
@@ -33,7 +33,8 @@ class TrajectoryGenerator:
         point.timestamp = prev_step.timestamp + 1 / SERVO_FREQ
         phase = prev_step.phase + 1 / (SERVO_FREQ * GAIT_PERIOD)
 
-        z_lift = self.leg_lift * sin(phase * pi)
+        # z_lift = self.leg_lift * sin(phase * pi)
+        z_lift = self.leg_lift * (-cos(phase * pi * 2) + 1) / 2
         current_lift = tf.translation_matrix((0.0, 0.0, z_lift))
 
         if phase > 1.0:
@@ -41,7 +42,6 @@ class TrajectoryGenerator:
             point.left_pose = prev_step.next_left_stand
             point.right_pose = prev_step.next_right_stand
 
-            # TODO after sending to stm, publish first element as frontPoint
             next_stand = self.path_proxy.get_point(point.timestamp)
 
             if prev_step.left_moving:

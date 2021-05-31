@@ -31,6 +31,7 @@ setup(
         'console_scripts': [
             f'line_detector = {package_name}.line_detector:main',
             f'sparser = {package_name}.sparser:main',
+            f'camera_calibration = {package_name}.camera_calibration:main',
         ],
     },
 )

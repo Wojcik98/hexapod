@@ -13,7 +13,7 @@ from nav_msgs.msg import Path
 from rclpy.node import Node
 
 PACKAGE = 'line_detection'
-UPDATE_INTERVAL = 0.5
+UPDATE_INTERVAL = 1.0
 
 
 def dist(a, b):
@@ -23,6 +23,7 @@ def dist(a, b):
 class LineDetector(Node):
     def __init__(self):
         super().__init__('line_detector')
+        self.seq = 0
         pkg_path = get_package_share_directory(PACKAGE)
         transform_file_path = os.path.join(pkg_path, 'image_transform.yaml')
         with open(transform_file_path, 'r') as f:
@@ -42,6 +43,8 @@ class LineDetector(Node):
             self.camera = cv2.VideoCapture(0)
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        print(f"Default buffer size: {self.camera.get(cv2.CAP_PROP_BUFFERSIZE)}")
+        self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         self.create_timer(UPDATE_INTERVAL, self.take_photo)
 
@@ -50,10 +53,14 @@ class LineDetector(Node):
         #     _, image = self.camera.read()
         # else:
         #     image = cv2.imread('/home/michal/orig.jpg')
-        _, image = self.camera.read()
-        # plt.imsave('/home/ubuntu/orig.jpg', image)
         start = time.time()
         start_start = start
+        for _ in range(3):     # clear buffer
+            _, image = self.camera.read()
+        stop = time.time()
+        print(f'Take image: {1000 * (stop - start):.3f}ms')
+        start = stop
+        # plt.imsave('/home/ubuntu/orig.jpg', image)
 
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         stop = time.time()
@@ -66,12 +73,15 @@ class LineDetector(Node):
         # print(f'Blurred: {1000 * (stop - start):.3f}ms')
         # start = stop
 
-        _, thres = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
+        _, thres = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY)
         stop = time.time()
         print(f'Thresholded: {1000 * (stop - start):.3f}ms')
         start = stop
 
         cont, hier = cv2.findContours(thres, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if len(cont) == 0:
+            return
+
         raw_path = max(cont, key=cv2.contourArea).astype("float64")
         # raw_path = raw_path.reshape((raw_path.shape[0], 2))
         # output = np.zeros((480, 640), dtype=np.uint8)
@@ -79,8 +89,6 @@ class LineDetector(Node):
         stop = time.time()
         print(f"Contour: {1000 * (stop - start):.3f}ms")
         start = stop
-
-        print(f'Elapsed {1000 * (stop - start_start):.3f}ms')
 
         path_shifted = self.shift_path(raw_path)
         path = cv2.perspectiveTransform(path_shifted, self.M)
@@ -90,15 +98,18 @@ class LineDetector(Node):
         # if going in another direction, abort
         # TODO make it  smarter
         if subpath[0][0] < 0.01:
+            print('negative?')
             return
 
         # SENDING MESSAGE
 
         msg = Path()
         # msg.header.frame_id = 'base_projection'
+        self.seq += 1
         msg.header.frame_id = 'base_link'
-        msg.header.stamp.sec = int(self.get_clock().now().nanoseconds / 10**9)
-        msg.header.stamp.nanosec = self.get_clock().now().nanoseconds % 10**9
+        nanoseconds = self.get_clock().now().nanoseconds
+        msg.header.stamp.sec = int(nanoseconds / 10 ** 9)
+        msg.header.stamp.nanosec = nanoseconds % 10 ** 9
 
         for point in subpath:
             pose_stamped = PoseStamped()
@@ -110,6 +121,9 @@ class LineDetector(Node):
 
         self.pub.publish(msg)
         print('Sent')
+        stop = time.time()
+        print(f'Total elapsed {1000 * (stop - start_start):.3f}ms')
+        # print(f"stamp:   {nanoseconds}")
 
     def shift_path(self, path):
         start_shape = path.shape

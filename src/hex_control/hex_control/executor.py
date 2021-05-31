@@ -59,7 +59,7 @@ class Executor(Node):
         self.publish_transform = get_transform_publisher(self.broadcaster, self.get_clock())
 
         self.pub = self.create_publisher(JointState, 'joint_states', 10)
-        self.base_link_start_height = tf.translation_matrix((0.0, 0.0, 0.1))
+        self.base_link_start_height = tf.translation_matrix((0.0, 0.0, 0.15))
 
         self.path_proxy = PathProxy(self.steps_trajectory, self.get_logger())
         self.trajectory_generator = TrajectoryGenerator(self.path_proxy)
@@ -101,15 +101,9 @@ class Executor(Node):
             self.start_timer.cancel()
             self.start_timer = None
             self.timer = self.create_timer(UPDATE_PERIOD, self.timer_callback)
-            self.tf_viz_tim = self.create_timer(0.1, self.tf_viz_callback)
+            self.tf_viz_tim = self.create_timer(0.05, self.tf_viz_callback)
 
         start = self.get_clock().now()
-        # diff = start.nanoseconds - self.prev_time.nanoseconds
-        # point_i = int(SERVO_FREQ * diff / (10 ** 9))
-        # print(diff/10**9, point_i)
-        # if point_i >= len(self.prev_trajectory):
-        #     point_i = len(self.prev_trajectory) - 1
-        # print(point_i)
         current_point = self.prev_trajectory[-1]
 
         new_trajectory = self.trajectory_generator.generate_trajectory(current_point)
@@ -194,9 +188,9 @@ class Executor(Node):
         # base = tf.concatenate_matrices(point.base_link_pose, self.base_link_height)
         base = point.base_link_pose
         self.publish_transform('odom', 'base_link', base)
-        projection = base.copy()
-        projection[2, 3] = 0.0
-        self.publish_transform('odom', 'base_projection', projection)
+        # projection = base.copy()
+        # projection[2, 3] = 0.0
+        # self.publish_transform('odom', 'base_projection', projection)
         self.publish_transform('odom', 'right_tri', point.right_pose)
         self.publish_transform('odom', 'left_tri', point.left_pose)
 

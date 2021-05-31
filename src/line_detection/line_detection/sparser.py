@@ -29,10 +29,22 @@ def matrix_dist(a: Matrix, b: Matrix):
     )
 
 
+def matrix_angle(a: Matrix, b: Matrix):
+    c = tf.concatenate_matrices(
+        tf.inverse_matrix(a),
+        b
+    )
+    relative = tf.translation_from_matrix(c)
+    x, y, _ = relative
+    rot = np.arctan2(y, x)
+    return rot
+
+
 class Sparser(Node):
     def __init__(self):
         super().__init__('sparser')
         self.stride = 0.02
+        self.turn = 7 * np.pi / 180
 
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
@@ -53,6 +65,7 @@ class Sparser(Node):
         )
 
     def new_trajectory(self, msg: Path):
+        print('path rcvd')
         # if len(self.curr_path) == 0:
         #     self.curr_path.append(self.transform('odom', 'front_point'))
         self.curr_path = [self.transform('odom', 'front_point')]
@@ -66,14 +79,18 @@ class Sparser(Node):
             for pose_stamped in msg.poses
         ]
 
-        first_new = dense_path[0]
+        # first_new = dense_path[0]
+        # first_new = dense_path[-1]
+        first_new = dense_path[len(dense_path) // 2]
         last_idx, last_point = self.get_last_closest(first_new, self.curr_path)
         last_point = self.curr_path[last_idx]
         inter_path = self.interpolate_path(last_point, first_new)
-        sparse_path = self.make_sparse(inter_path[-1], dense_path)
-        fixed_orientation = self.fix_orientation(
-            self.curr_path[last_idx - 1], inter_path + sparse_path
-        )
+        # sparse_path = self.make_sparse(inter_path[-1], dense_path)
+        # fixed_orientation = self.fix_orientation(
+        #     self.curr_path[last_idx - 1], inter_path + sparse_path
+        # )
+        fixed_orientation = inter_path
+        # print(fixed_orientation)
 
         self.curr_path = self.curr_path[:last_idx] + fixed_orientation
         front_point = self.transform('odom', 'front_point')
@@ -115,14 +132,29 @@ class Sparser(Node):
         interpolated_points = [start_point]
         prev = start_point
         d = matrix_dist(prev, stop_point)
+        alpha = matrix_angle(prev, stop_point)
 
-        while d > self.stride:
-            ratio = self.stride / d
+        while d > self.stride or abs(alpha) > self.turn:
+            ratio = min(self.stride / d, self.turn / abs(alpha))
             inter = interpolate(prev, stop_point, ratio)
-            interpolated_points.append(inter)
-            prev = inter
-            d = matrix_dist(prev, stop_point)
+            prev_rot = tf.euler_from_matrix(prev, axes='sxyz')[2]
 
+            if self.turn > abs(alpha):
+                delta = alpha
+            else:
+                delta = np.sign(alpha) * self.turn
+            rot = prev_rot + delta
+
+            oriented_point = tf.concatenate_matrices(
+                tf.translation_matrix(tf.translation_from_matrix(inter)),
+                tf.rotation_matrix(rot, (0, 0, 1))
+            )
+            interpolated_points.append(oriented_point)
+            prev = oriented_point
+            d = matrix_dist(prev, stop_point)
+            alpha = matrix_angle(prev, stop_point)
+
+        print('interpolated')
         return interpolated_points
 
     def make_sparse(self, start_point: Matrix, dense_path: List[Matrix]) -> List[Matrix]:
@@ -142,23 +174,23 @@ class Sparser(Node):
 
         return sparse_path
 
-    def fix_orientation(self, prev_point: Matrix, path: List[Matrix]) -> List[Matrix]:
-        new_path = []
-        for i, point in enumerate(path):
-            prev_tr = tf.translation_from_matrix(prev_point)
-            point_tr = tf.translation_from_matrix(point)
-            relative = point_tr - prev_tr
-            x, y, _ = relative
-            rot = np.arctan2(y, x)
-            oriented_point = tf.concatenate_matrices(
-                tf.translation_matrix(point_tr),
-                tf.rotation_matrix(rot, (0, 0, 1))
-            )
-
-            new_path.append(oriented_point)
-            prev_point = point
-
-        return new_path
+    # def fix_orientation(self, prev_point: Matrix, path: List[Matrix]) -> List[Matrix]:
+    #     new_path = []
+    #     for i, point in enumerate(path):
+    #         prev_tr = tf.translation_from_matrix(prev_point)
+    #         point_tr = tf.translation_from_matrix(point)
+    #         relative = point_tr - prev_tr
+    #         x, y, _ = relative
+    #         rot = np.arctan2(y, x)
+    #         oriented_point = tf.concatenate_matrices(
+    #             tf.translation_matrix(point_tr),
+    #             tf.rotation_matrix(rot, (0, 0, 1))
+    #         )
+    #
+    #         new_path.append(oriented_point)
+    #         prev_point = point
+    #
+    #     return new_path
 
     def get_farthest_in_range(self, start_point: Matrix, path: List[Matrix]) -> Tuple[int, Matrix]:
         farthest = 0
