@@ -11,6 +11,8 @@ import transformations as tf
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 from math import pi
 from nav_msgs.msg import Path
 from rclpy.node import Node
@@ -42,14 +44,18 @@ class LineDetector(Node):
         # self._tf_listener = TransformListener(self._tf_buffer, self)
         # self.transform = get_transform_lookup(self._tf_buffer)
         self.pub = self.create_publisher(Path, 'dense_path', 10)
-        self.rpi = platform.machine() == 'aarch64'
+        # self.raw_img_pub = self.create_publisher(Image, 'camera_image', 10)
+        self.contour_pub = self.create_publisher(Image, 'line_contour', 10)
+        self.bridge = CvBridge()
 
+        self.rpi = platform.machine() == 'aarch64'
         if self.rpi:
             self.camera = cv2.VideoCapture(-1, cv2.CAP_V4L2)
         else:
             self.camera = cv2.VideoCapture(0)
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         self.create_timer(UPDATE_INTERVAL, self.take_photo)
 
@@ -58,32 +64,60 @@ class LineDetector(Node):
         #     _, image = self.camera.read()
         # else:
         #     image = cv2.imread('/home/michal/orig.jpg')
+        for _ in range(2):  # camera has strange buffer and we need to bypass it
+            _, image = self.camera.read()
         _, image = self.camera.read()
+        # imgmsg = self.bridge.cv2_to_imgmsg(image)
+        # imgmsg.header.frame_id = 'odom'
+        # imgmsg.header.stamp.sec = int(self.get_clock().now().nanoseconds / 10**9)
+        # imgmsg.header.stamp.nanosec = self.get_clock().now().nanoseconds % 10**9
+        # self.raw_img_pub.publish(imgmsg)
         # plt.imsave('/home/ubuntu/orig.jpg', image)
         start = time.time()
         start_start = start
 
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        sigma = 2
+        blur = cv2.GaussianBlur(image, (0, 0), sigma)
+        blur = cv2.GaussianBlur(blur, (0, 0), sigma)
+        blur = cv2.GaussianBlur(blur, (0, 0), sigma)
         stop = time.time()
-        print(f'To gray: {1000 * (stop - start):.3f}ms')
+        print(f"Blurring: {1000 * (stop - start):.3f}ms")
         start = stop
 
-        _, thres = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY_INV)
+        imghsv = cv2.cvtColor(blur, cv2.COLOR_RGB2HSV)
+        white_lower_hsv = np.array([0, 0, 150])
+        white_upper_hsv = np.array([179, 80, 255])
+        masked = cv2.inRange(imghsv, white_lower_hsv, white_upper_hsv)
         stop = time.time()
-        print(f'Thresholded: {1000 * (stop - start):.3f}ms')
+        print(f"Masking color: {1000 * (stop - start):.3f}ms")
         start = stop
 
-        cont, hier = cv2.findContours(thres, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        raw_path = max(cont, key=cv2.contourArea).astype("float64")
+        cont, hier = cv2.findContours(masked, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if len(cont) == 0:
+            print("No contours detected!")
+            return
+        # self.get_logger().info(f"Cont: {cont}, hier: {hier}")
+        raw_path = max(cont, key=cv2.contourArea)
+        print(raw_path)
         stop = time.time()
         print(f"Contour: {1000 * (stop - start):.3f}ms")
         start = stop
 
         print(f'Elapsed {1000 * (stop - start_start):.3f}ms')
 
-        path_shifted = self.shift_path(raw_path)
+        path_shifted = self.shift_path(raw_path.astype("float64"))
+        # contour_img = np.zeros((480, 640), dtype=np.uint8)
+        contour_img = image.copy()
+        cv2.drawContours(contour_img, [raw_path], -1, 255, thickness=3)  # TODO draw on original?
+        cont_msg = self.bridge.cv2_to_imgmsg(contour_img)
+        cont_msg.header.frame_id = 'odom'
+        cont_msg.header.stamp.sec = int(self.get_clock().now().nanoseconds / 10**9)
+        cont_msg.header.stamp.nanosec = self.get_clock().now().nanoseconds % 10**9
+        self.contour_pub.publish(cont_msg)
+
         path = cv2.perspectiveTransform(path_shifted, self.M)
         path = path.reshape((len(path), 2))
+        # TODO take only longest positive y derivative?
         subpath = self.get_subpath(path)
 
         # if going in another direction, abort
@@ -115,6 +149,7 @@ class LineDetector(Node):
         print('Dense path published!')
 
     def shift_path(self, path):
+        """Shifts path so it starts at its top left point"""
         start_shape = path.shape
         path = path.reshape((path.shape[0], 2))
         top = path[:, 1] == np.max(path[:, 1], axis=0)
